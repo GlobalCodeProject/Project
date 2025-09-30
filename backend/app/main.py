@@ -19,7 +19,7 @@ rolling = RollingStats()
 detector = IdleDetector(
     default_threshold_w=settings.idle_power_threshold_w,
     default_duration_s=settings.idle_duration_sec,
-    window=5,
+    window=1,
 )
 
 # Helpers 
@@ -41,6 +41,7 @@ def _raise_alert(device_id: str):
 
 def _handle_idle(device_id: str, power_w: float):
     if detector.add(device_id, float(power_w or 0)):
+        print(f"[IdleDetector] sustained idle: {device_id} → creating alert if none open")
         # If not already open or snoozed
         with Session(engine) as s:
             existing = s.exec(select(Alert).where(

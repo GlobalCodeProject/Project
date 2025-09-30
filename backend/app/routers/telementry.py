@@ -16,6 +16,7 @@ class DCLastReading(BaseModel):
 
 @router.get("/dc/{device_id}", response_model=DCLastReading)
 def last_dc(device_id: str, request: Request):
+    print("device ID: ", device_id)
     """Return the most recent DC reading from the database."""
     engine = request.app.state.engine
     with Session(engine) as s:

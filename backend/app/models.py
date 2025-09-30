@@ -25,6 +25,14 @@ class Device(SQLModel, table=True):
 
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
+class Approval(SQLModel, table=True):
+    __tablename__ = "approvals"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    channel_id: str = Field(index=True)
+    action: str
+    state: str
+    ts: datetime = Field(default_factory=datetime.utcnow, index=True)
 
 # Telemetry (DC) 
 class TelemetryDC(SQLModel, table=True):

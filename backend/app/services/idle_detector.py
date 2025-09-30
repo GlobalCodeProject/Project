@@ -15,7 +15,7 @@ class IdleDetector:
         self.default_threshold = default_threshold_w
         self.default_duration = default_duration_s
         self.window = window
-        self.buffers: Dict[str, Deque[float]] = {}      # device_id -> last W samples
+        self.buffers: Dict[str, Deque[float]] = {}  # device_id -> last W samples
         self.below_since: Dict[str, Optional[float]] = {}  # device_id -> ts when avg dropped below or None
         self.overrides: Dict[str, Tuple[float, int]] = {}  # device_id -> (threshold_w, duration_s)
 
@@ -39,7 +39,14 @@ class IdleDetector:
         if avg < th:
             if self.below_since.get(device_id) is None:
                 self.below_since[device_id] = now
-            return (now - self.below_since[device_id]) >= du
+            elapsed = now - self.below_since[device_id]
+            ready = elapsed >= du
+            # DEBUG ↓↓↓
+            print(f"[IdleDetector] {device_id}: avg={avg:.2f}W<th={th:.2f}W, "
+                  f"elapsed={elapsed:.1f}s/{du}s, window={len(buf)}, trigger={ready}")
+            return ready
         else:
+            # DEBUG ↓↓↓
+            print(f"[IdleDetector] {device_id}: avg={avg:.2f}W>=th={th:.2f}W, reset timer")
             self.below_since[device_id] = None
             return False
