@@ -1,89 +1,128 @@
 from fastapi import FastAPI
 from datetime import datetime
-from sqlmodel import Session
+from sqlmodel import Session, select
 from .config import get_settings
 from .db import init_db, engine
-from .models import TelemetryDC, Alert
+from .models import Device, TelemetryDC, TelemetryAC, Alert
 from .services.mqtt_bridge import MQTTBridge
 from .services.idle_detector import IdleDetector
-from .routers import health, devices, telementry, alerts, actions
+from .services.rolling_stats import RollingStats
+from .routers import health, devices, telementry, ac_telemetry, alerts, reports
 
 app = FastAPI(title="Smart Power Optimizer (Backend)")
 settings = get_settings()
 
-# in-memory stores 
-latest_dc = {}   # device_id -> last payload
-alerts_store = alerts  # import alias
-telementry._latest_dc = latest_dc
-
-# Idle detector
+# In-memory stores 
+latest_dc = {}   # device_id -> last DC payload
+latest_ac = {}   # device_id -> last AC payload
+rolling = RollingStats()
 detector = IdleDetector(
-    threshold_w=settings.idle_power_threshold_w,
-    duration_s=settings.idle_duration_sec,
+    default_threshold_w=settings.idle_power_threshold_w,
+    default_duration_s=settings.idle_duration_sec,
     window=5,
 )
 
+# Helpers 
+def _apply_device_overrides_from_db():
+    with Session(engine) as s:
+        for d in s.exec(select(Device)).all():
+            detector.set_overrides(d.device_id, d.idle_threshold_w, d.idle_duration_sec)
+
 def _raise_alert(device_id: str):
-    # In-memory alert record (MVP); also persist to DB for history
-    alert = {
-        "device_id": device_id,
-        "reason": "idle_detected",
-        "threshold_w": settings.idle_power_threshold_w,
-        "duration_s": settings.idle_duration_sec,
-        "status": "open",
-        "ts_open": datetime.utcnow().isoformat()
-    }
-    alerts_store._add_alert(alert)
-    # Persist
     with Session(engine) as s:
-        s.add(Alert(
+        a = Alert(
             device_id=device_id,
-            threshold_w=settings.idle_power_threshold_w,
-            duration_s=settings.idle_duration_sec,
+            threshold_w=detector._cfg(device_id)[0],
+            duration_s=detector._cfg(device_id)[1],
             status="open",
-        ))
+        )
+        s.add(a)
         s.commit()
 
-def _on_dc(device_id: str, payload: dict):
-    # Update cache
-    latest_dc[device_id] = payload
-
-    # Persist telemetry
-    try:
-        v = float(payload.get("v", 0))
-        i = float(payload.get("i", 0))
-        p = float(payload.get("p", 0))
-    except Exception:
-        v = i = p = 0.0
-    with Session(engine) as s:
-        s.add(TelemetryDC(device_id=device_id, voltage_v=v, current_a=i, power_w=p))
-        s.commit()
-
-    # Idle detection
-    if detector.add(device_id, p):
-        # Only raise if not already open for this device
-        open_for_device = [a for a in alerts_store._alerts
-                           if a["device_id"] == device_id and a["status"] == "open"]
-        if not open_for_device:
+def _handle_idle(device_id: str, power_w: float):
+    if detector.add(device_id, float(power_w or 0)):
+        # If not already open or snoozed
+        with Session(engine) as s:
+            existing = s.exec(select(Alert).where(
+                Alert.device_id == device_id,
+                Alert.status.in_(("open", "snoozed", "ack")),
+                )).first()
+        if not existing:
             _raise_alert(device_id)
 
-# MQTT bridge
-mqtt = MQTTBridge(settings.mqtt_host, settings.mqtt_port, settings.mqtt_base, _on_dc)
+#DC ingest callback 
+def _on_dc(device_id: str, payload: dict):
+    print("DC IN:", device_id, payload)
+    latest_dc[device_id] = payload
+    # persist
+    v = float(payload.get("v") or 0)
+    i = float(payload.get("i") or 0)
+    p = float(payload.get("p") or 0)
+    ts = datetime.utcnow()
+    with Session(engine) as s:
+        s.add(TelemetryDC(device_id=device_id, voltage_v=v, current_a=i, power_w=p, ts=ts))
+        # touch device last_seen & current power
+        d = s.exec(select(Device).where(Device.device_id == device_id)).first()
+        if d:
+            d.last_seen_at = ts
+            d.current_power_w = p
+            s.add(d)
+        s.commit()
+    rolling.add(device_id, p)
+    _handle_idle(device_id, p)
+
+# AC ingest callback 
+def _on_ac(device_id: str, payload: dict):
+    print("AC IN:", device_id, payload)
+    latest_ac[device_id] = payload
+    v  = float(payload.get("v") or 0)
+    i  = float(payload.get("i") or 0)
+    p  = float(payload.get("p") or 0)
+    pf = payload.get("pf"); pf = float(pf) if pf is not None else None
+    f  = payload.get("f");  f  = float(f)  if f  is not None else None
+    e  = payload.get("e_wh"); e = float(e) if e is not None else None
+    ts = datetime.utcnow()
+    with Session(engine) as s:
+        s.add(TelemetryAC(device_id=device_id, voltage_v=v, current_a=i,
+                          power_w=p, pf=pf, frequency_hz=f, energy_wh=e, ts=ts))
+        d = s.exec(select(Device).where(Device.device_id == device_id)).first()
+        if d:
+            d.last_seen_at = ts
+            d.current_power_w = p
+            s.add(d)
+        s.commit()
+    rolling.add(device_id, p)
+    _handle_idle(device_id, p)
+
+# MQTT bridge (listening to both DC and AC)
+mqtt = MQTTBridge(settings.mqtt_host, settings.mqtt_port, settings.mqtt_base,
+                  on_dc_measure=_on_dc, on_ac_measure=_on_ac)
 
 # --- Mount routers ---
-app.include_router(health.router, prefix="", tags=["health"])
-app.include_router(devices.router, prefix="/devices", tags=["devices"])
-app.include_router(telementry.router, prefix="/telemetry", tags=["telemetry"])  # name as in your tree
-app.include_router(alerts.router, prefix="/alerts", tags=["alerts"])
-app.include_router(actions.router, prefix="/actions", tags=["actions"])
+app.include_router(health.router,        prefix="",           tags=["health"])
+app.include_router(devices.router,       prefix="/devices",   tags=["devices"])
+app.include_router(telementry.router,    prefix="/telemetry", tags=["telemetry-dc"])
+app.include_router(ac_telemetry.router,  prefix="/telemetry", tags=["telemetry-ac"])
+app.include_router(alerts.router,        prefix="/alerts",    tags=["alerts"])
+app.include_router(reports.router,       prefix="/reports",   tags=["reports"])
 
-# Inject shared MVP objects
-telementry._latest_dc = latest_dc
-actions._publish = mqtt.publish_switch
+# Inject shared state for routers
+app.state.engine = engine
+app.state.latest_dc = latest_dc
+app.state.latest_ac = latest_ac
+app.state.rolling = rolling
+app.state.detector = detector
+app.state.publish_switch = mqtt.publish_switch
+
+# For HTTP ingest to reuse ingest logic
+app.state.handle_dc = _on_dc
+app.state.handle_ac = _on_ac
 
 @app.on_event("startup")
 def _startup():
-    init_db()
+    # choose reset=True only when you want a clean slate in dev
+    init_db(reset=False)
+    _apply_device_overrides_from_db()
     mqtt.start()
 
 @app.get("/")

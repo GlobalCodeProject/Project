@@ -15,9 +15,10 @@ class Settings(BaseSettings):
 
     db_url: str = "sqlite:///./data/app.db"
 
-    model_config = {
-        "env_file": ".env"  # load from .env if present
-    }
+    tariff_usd_per_kwh: float = 0.20
+    co2_kg_per_kwh: float = 0.40
+
+    model_config = {"env_file": ".env"}
 
 
 @lru_cache
