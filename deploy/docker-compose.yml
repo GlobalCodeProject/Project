@@ -1,0 +1,27 @@
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: spo-mosquitto
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
+
+  backend:
+    image: python:3.11-slim
+    container_name: spo-backend
+    working_dir: /app
+    volumes:
+      - ../backend:/app
+    environment:
+      - MQTT_HOST=mosquitto
+      - MQTT_PORT=1883
+      - MQTT_BASE=spo/v1
+      - APP_ENV=dev
+      - API_PORT=8000
+      - DB_URL=sqlite:///./data/app.db
+    command: sh -c "pip install -r requirements.txt && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    ports:
+      - "8000:8000"
+    depends_on:
+      - mosquitto
