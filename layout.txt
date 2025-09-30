@@ -1,0 +1,46 @@
+smart-power-optimizer/
+├─ backend/
+│  ├─ app/
+│  │  ├─ main.py                 # FastAPI app, routes
+│  │  ├─ config.py               # Pydantic Settings (env-driven)
+│  │  ├─ deps.py                 # Auth deps (JWT), DB sessions
+│  │  ├─ models/                 # SQLModel/SQLAlchemy models
+│  │  ├─ schemas/                # Pydantic request/response
+│  │  ├─ services/
+│  │  │  ├─ mqtt_bridge.py       # Async MQTT client (ingest/control)
+│  │  │  ├─ idle_detector.py     # Threshold + duration logic
+│  │  │  └─ alerts.py            # Alert lifecycle
+│  │  ├─ routers/
+│  │  │  ├─ devices.py           # CRUD devices
+│  │  │  ├─ telemetry.py         # Query/aggregate telemetry
+│  │  │  ├─ alerts.py            # List/ack
+│  │  │  └─ actions.py           # Approve/deny shutdown
+│  │  └─ utils/
+│  ├─ migrations/                # Alembic
+│  ├─ tests/
+│  ├─ requirements.txt
+│  └─ Dockerfile
+├─ edge/
+│  └─ esp32/
+│     ├─ src/
+│     │  ├─ main.cpp             # Arduino/ESP-IDF app
+│     │  ├─ ina219.cpp/.h        # INA219 read + calc
+│     │  └─ mqtt_client.cpp/.h   # Connect/publish/subscribe
+│     └─ platformio.ini          # or CMake/IDF config
+├─ frontend/
+│  ├─ src/
+│  │  ├─ api/                    # TS client for FastAPI
+│  │  ├─ components/             # Cards, tables, charts
+│  │  ├─ pages/                  # Dashboard, Alerts
+│  │  └─ state/                  # Query cache/store
+│  ├─ index.html
+│  ├─ package.json
+│  └─ vite.config.ts
+├─ deploy/
+│  ├─ docker-compose.yml         # mosquitto, backend, db, frontend
+│  ├─ mosquitto/
+│  │  ├─ mosquitto.conf
+│  │  └─ passwd
+│  └─ nginx/
+├─ .env.example
+└─ README.md
