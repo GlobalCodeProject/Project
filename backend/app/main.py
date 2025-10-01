@@ -11,10 +11,20 @@ from .services.mqtt_bridge import MQTTBridge
 from .services.idle_detector import IdleDetector
 from .services.rolling_stats import RollingStats
 from .routers import health, devices, telementry, ac_telemetry, alerts, reports, debug
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="Smart Power Optimizer (Backend)")
+# Add this RIGHT AFTER creating the app
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins during development
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all HTTP methods
+    allow_headers=["*"],  # Allow all headers
+)
 settings = get_settings()
 mailer = Mailer()
+
 
 # -------- In-memory stores / services --------
 latest_dc = {}  # device_id -> last DC payload
