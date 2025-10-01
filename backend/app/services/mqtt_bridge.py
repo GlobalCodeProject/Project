@@ -78,6 +78,7 @@ class MQTTBridge:
         print("Subscribing to:", self.topic_ac)
         client.subscribe(self.topic_ac, qos=1)
         client.publish(f"{self.base}/backend/status", payload="online", qos=1, retain=True)
+        print(f"{self.base}/backend/status")
 
     def _on_message(self, client, userdata, msg):
         try:

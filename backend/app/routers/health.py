@@ -1,11 +1,27 @@
 from time import time
 
 from fastapi import APIRouter, Request
+from sqlmodel import Session
 
 router = APIRouter()
 
 @router.get("/health")
-def health():
+def health(request: Request):
+    # DB ping
+    try:
+        with Session(request.app.state.engine) as s:
+            s.exec("SELECT 1")
+        db_ok = True
+    except Exception:
+        db_ok = False
+    return {"ok": True, "db": db_ok}
+
+@router.post("/__test_email")
+def test_email(request: Request):
+    m = getattr(request.app.state, "mailer", None)
+    if not m:
+        return {"ok": False, "msg": "mailer not set"}
+    m._send("SPO test email", "<p>This is a test</p>")
     return {"ok": True}
 
 
