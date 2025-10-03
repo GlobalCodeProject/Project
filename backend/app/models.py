@@ -1,5 +1,6 @@
 from typing import Optional
 from datetime import datetime
+from sqlalchemy import Column, String, Integer
 from sqlmodel import SQLModel, Field
 
 
@@ -16,9 +17,14 @@ class Device(SQLModel, table=True):
     idle_duration_sec: Optional[int] = None
 
     # Switch mapping for control (if applicable)
-    switch_id: Optional[str] = None
-    switch_channel: Optional[str] = None  # e.g. "ch1" or None for single-channel
-
+    switch_id: str | None = Field(
+        default="main",
+        sa_column=Column(String, server_default="main")
+    )
+    switch_channel: str | None = Field(
+        default="main",
+        sa_column=Column(Integer, server_default="main")
+    )
     # Runtime hints (updated by backend)
     last_seen_at: Optional[datetime] = None
     current_power_w: Optional[float] = None

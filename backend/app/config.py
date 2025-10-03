@@ -12,9 +12,9 @@ class Settings(BaseSettings):
     api_port: int = 8000
 
     # MQTT ...
-    mqtt_host: str = "7d1417b4c08544b99cab7d8f73fc591c.s1.eu.hivemq.cloud"
+    mqtt_host: str = "d85467e9b3be4d9390f52e2a6c740aa6.s1.eu.hivemq.cloud"
     mqtt_port: int = 8883
-    mqtt_base: str = "spo/v1"
+    mqtt_base: str = "pow/measure"
     mqtt_username: Optional[str] = None
     mqtt_password: Optional[str] = None
     mqtt_tls: bool = True

@@ -72,15 +72,17 @@ class MQTTBridge:
 
     # Callbacks
     def _on_connect(self, client, userdata, flags, rc, properties=None):
+        print(self.base)
         print("MQTT connected, rc=", rc)
         print("Subscribing to:", self.topic_dc)
-        client.subscribe(self.topic_dc, qos=1)
+        client.subscribe(self.topic_dc)
         print("Subscribing to:", self.topic_ac)
-        client.subscribe(self.topic_ac, qos=1)
-        client.publish(f"{self.base}/backend/status", payload="online", qos=1, retain=True)
-        print(f"{self.base}/backend/status")
+        client.subscribe(self.topic_ac)
+        client.publish(f"{self.base}", payload="kingmaker", retain=True)
+        print(f"{self.base}")
 
     def _on_message(self, client, userdata, msg):
+        print("message received")
         try:
             parts = msg.topic.split("/")
             # .../telemetry/{dc|ac}/{deviceId}/measure
@@ -98,7 +100,7 @@ class MQTTBridge:
     def publish_switch(self, switch_id: str, state: str, channel: str | None = None):
         ch = channel or "ch1"
         topic = f"{self.base}/control/switch/{switch_id}/{ch}/set"
-        self.client.publish(topic, state.upper(), qos=1, retain=False)
+        self.client.publish(topic, state.upper(), retain=False)
 
     def start(self):
         def _loop():

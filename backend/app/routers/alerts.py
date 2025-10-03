@@ -9,13 +9,15 @@ router = APIRouter()
 
 ALLOWED_FOR_SHUTDOWN = ("open", "ack", "snoozed")
 
+
 class ShutdownBody(BaseModel):
     reason: Optional[str] = None
+
 
 @router.post("/{alert_id}/shutdown")
 @router.post("/{alert_id}/shutdown/")
 def shutdown_alert(alert_id: int, body: ShutdownBody, request: Request):
-    engine  = request.app.state.engine
+    engine = request.app.state.engine
     publish = request.app.state.publish_switch
 
     with Session(engine) as s:
@@ -23,8 +25,8 @@ def shutdown_alert(alert_id: int, body: ShutdownBody, request: Request):
         if not a:
             raise HTTPException(404, "alert not found")
 
-        status     = a.status              # capture while bound
-        device_id  = a.device_id           # capture while bound
+        status = a.status  # capture while bound
+        device_id = a.device_id  # capture while bound
 
         if status not in ALLOWED_FOR_SHUTDOWN:
             raise HTTPException(400, f"alert not actionable (status={status})")
@@ -33,14 +35,14 @@ def shutdown_alert(alert_id: int, body: ShutdownBody, request: Request):
         if not d or not d.switch_id:
             raise HTTPException(400, "device has no switch mapping")
 
-        switch_id  = d.switch_id
-        channel    = d.switch_channel
+        switch_id = d.switch_id
+        channel = d.switch_channel
 
         # Publish OFF command
         publish(switch_id, "OFF", channel)
 
         # Close alert
-        a.status   = "closed"
+        a.status = "closed"
         a.ts_close = datetime.utcnow()
         s.add(a)
         s.commit()
@@ -59,7 +61,7 @@ def shutdown_alert(alert_id: int, body: ShutdownBody, request: Request):
 @router.post("/shutdown-latest")
 @router.post("/shutdown-latest/")
 def shutdown_latest(request: Request):
-    engine  = request.app.state.engine
+    engine = request.app.state.engine
     publish = request.app.state.publish_switch
 
     with Session(engine) as s:
@@ -72,7 +74,7 @@ def shutdown_latest(request: Request):
         if not a:
             raise HTTPException(404, "no open alerts")
 
-        alert_id  = a.id
+        alert_id = a.id
         device_id = a.device_id
 
         d = s.exec(select(Device).where(Device.device_id == device_id)).first()
@@ -80,11 +82,11 @@ def shutdown_latest(request: Request):
             raise HTTPException(400, "device has no switch mapping")
 
         switch_id = d.switch_id
-        channel   = d.switch_channel
+        channel = d.switch_channel
 
         publish(switch_id, "OFF", channel)
 
-        a.status   = "closed"
+        a.status = "closed"
         a.ts_close = datetime.utcnow()
         s.add(a)
         s.commit()
@@ -97,3 +99,12 @@ def shutdown_latest(request: Request):
         "published": {"switch_id": switch_id, "channel": channel},
         "closed": True,
     }
+
+
+@router.get("/", response_model=List[Alert])
+def list_alerts(request: Request, status: Optional[str] = Query(None)):
+    with Session(request.app.state.engine) as s:
+        q = select(Alert)
+        if status:
+            q = q.where(Alert.status == status)
+        return s.exec(q.order_by(Alert.id.desc())).all()

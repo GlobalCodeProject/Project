@@ -10,7 +10,7 @@ from .services.mailer import Mailer
 from .services.mqtt_bridge import MQTTBridge
 from .services.idle_detector import IdleDetector
 from .services.rolling_stats import RollingStats
-from .routers import health, devices, telementry, ac_telemetry, alerts, reports, debug
+from .routers import health, devices, telementry, ac_telemetry, alerts, reports, debug, agent
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="Smart Power Optimizer (Backend)")
@@ -149,8 +149,10 @@ app.include_router(devices.router, prefix="/devices", tags=["devices"])
 app.include_router(telementry.router, prefix="/telemetry", tags=["telemetry-dc"])
 app.include_router(ac_telemetry.router, prefix="/telemetry", tags=["telemetry-ac"])
 app.include_router(alerts.router, prefix="/alerts", tags=["alerts"])
+app.include_router(alerts.router, prefix="/alerts", tags=["alerts"])
 app.include_router(reports.router, prefix="/reports", tags=["reports"])
 app.include_router(debug.router, prefix="", tags=["debug"])
+app.include_router(agent.router, tags=["agent"])
 
 # -------- Shared state injection --------
 app.state.engine = engine
